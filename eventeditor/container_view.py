@@ -4,6 +4,7 @@ import yaml
 
 from eventeditor.container_model import ContainerModel, ContainerModelColumn
 from eventeditor.data_editors import CustomTableView
+from eventeditor.i18n import tr
 import eventeditor.util as util
 from evfl import ActorIdentifier, Argument, Container
 import PyQt5.QtCore as qc # type: ignore
@@ -18,7 +19,7 @@ class ContainerAddItemDialogType(IntEnum):
 class ContainerAddItemDialog(q.QDialog):
     def __init__(self, parent, model: ContainerModel) -> None:
         super().__init__(parent, qc.Qt.WindowTitleHint | qc.Qt.WindowSystemMenuHint)
-        self.setWindowTitle(f'Add container item')
+        self.setWindowTitle(tr('dialog.add_container_item'))
         self.resize(500, 100)
         self.model = model
 
@@ -27,9 +28,9 @@ class ContainerAddItemDialog(q.QDialog):
         self.createValueWidgets()
 
         form_layout = q.QFormLayout()
-        form_layout.addRow('&Key:', self.key_ledit)
-        form_layout.addRow('Type:', self.type_layout)
-        form_layout.addRow('&Value:', self.value_widget)
+        form_layout.addRow(tr('label.key'), self.key_ledit)
+        form_layout.addRow(tr('label.type'), self.type_layout)
+        form_layout.addRow(tr('label.value'), self.value_widget)
 
         layout = q.QVBoxLayout(self)
         layout.addLayout(form_layout)
@@ -46,9 +47,9 @@ class ContainerAddItemDialog(q.QDialog):
             rbtn = q.QRadioButton(label_text)
             self.type_group.addButton(rbtn, btn_id)
             self.type_layout.addWidget(rbtn)
-        add_type_choice('&Int/float/bool/string/array', ContainerAddItemDialogType.Value)
-        add_type_choice('&Actor identifier', ContainerAddItemDialogType.ActorIdentifier)
-        add_type_choice('Ar&gument', ContainerAddItemDialogType.Argument)
+        add_type_choice(tr('label.type_value'), ContainerAddItemDialogType.Value)
+        add_type_choice(tr('label.type_actor_identifier'), ContainerAddItemDialogType.ActorIdentifier)
+        add_type_choice(tr('label.type_argument'), ContainerAddItemDialogType.Argument)
         self.type_group.button(ContainerAddItemDialogType.Value).setChecked(True)
         self.type_layout.addStretch()
         self.type_group.buttonClicked[int].connect(self.onTypeBtnClicked)
@@ -60,15 +61,15 @@ class ContainerAddItemDialog(q.QDialog):
         font = qg.QFontDatabase.systemFont(qg.QFontDatabase.FixedFont)
         font.setPointSize(int(font.pointSize() * 1.05))
         self.tedit.setFont(font)
-        self.tedit.setPlaceholderText('Item data (YAML)\nExamples:\n[1, 2, 3]\n3.1415\ntrue')
+        self.tedit.setPlaceholderText(tr('label.item_data_placeholder'))
         self.value_widget.addWidget(self.tedit)
 
         actor_id_widget = q.QWidget()
         actor_id_form = q.QFormLayout(actor_id_widget)
         self.actor_id_name_box = q.QLineEdit()
-        actor_id_form.addRow('&Name:', self.actor_id_name_box)
+        actor_id_form.addRow(tr('label.name'), self.actor_id_name_box)
         self.actor_id_sub_name_box = q.QLineEdit()
-        actor_id_form.addRow('&Sub name:', self.actor_id_sub_name_box)
+        actor_id_form.addRow(tr('label.sub_name'), self.actor_id_sub_name_box)
         self.value_widget.addWidget(actor_id_widget)
 
         argument_widget = q.QWidget()
@@ -85,22 +86,22 @@ class ContainerAddItemDialog(q.QDialog):
         try:
             data = yaml.load(self.tedit.toPlainText(), Loader=yaml.SafeLoader)
         except yaml.parser.ParserError as e:
-            q.QMessageBox.critical(self, 'Invalid data', f'Could not parse item data. Please verify that the syntax is correct and try again.\n\nDetails:\n\n{e}')
+            q.QMessageBox.critical(self, tr('message.invalid_data'), tr('message.cannot_parse_yaml').format(error=e))
             return None
 
         if isinstance(data, list):
             if not data:
-                q.QMessageBox.critical(self, 'Invalid data', 'Arrays must contain at least one element.')
+                q.QMessageBox.critical(self, tr('message.invalid_data'), tr('message.array_not_empty'))
                 return None
             if not util.is_valid_container_value_type(data[0]):
-                q.QMessageBox.critical(self, 'Invalid data', f'{type(data[0]).__name__} is not a valid data type.')
+                q.QMessageBox.critical(self, tr('message.invalid_data'), tr('message.invalid_type').format(type=type(data[0]).__name__))
                 return None
             if not util.is_list_homogeneous(data):
-                q.QMessageBox.critical(self, 'Invalid data', 'Arrays can only contain one element type.')
+                q.QMessageBox.critical(self, tr('message.invalid_data'), tr('message.array_one_type'))
                 return None
         else:
             if not util.is_valid_container_value_type(data):
-                q.QMessageBox.critical(self, 'Invalid data', f'{type(data).__name__} is not a valid data type.')
+                q.QMessageBox.critical(self, tr('message.invalid_data'), tr('message.invalid_type').format(type=type(data).__name__))
                 return None
 
         return data
@@ -108,24 +109,24 @@ class ContainerAddItemDialog(q.QDialog):
     def parseActorIdentifier(self) -> typing.Any:
         identifier = ActorIdentifier(self.actor_id_name_box.text(), self.actor_id_sub_name_box.text())
         if not identifier.name:
-            q.QMessageBox.critical(self, 'Invalid actor identifier', 'The actor name cannot be empty.')
+            q.QMessageBox.critical(self, tr('message.invalid_actor_identifier'), tr('message.name_not_empty'))
             return None
         return identifier
 
     def parseArgument(self) -> typing.Any:
         argument = Argument(self.argument_box.text())
         if not argument:
-            q.QMessageBox.critical(self, 'Invalid argument', 'The argument name cannot be empty.')
+            q.QMessageBox.critical(self, tr('message.invalid_argument'), tr('message.name_not_empty'))
             return None
         return argument
 
     def accept(self) -> None:
         key_name: str = self.key_ledit.text()
         if not key_name:
-            q.QMessageBox.critical(self, 'Invalid key', 'The key name cannot be empty.')
+            q.QMessageBox.critical(self, tr('message.invalid_key'), tr('message.key_not_empty'))
             return
         if self.model.has(key_name):
-            q.QMessageBox.critical(self, 'Invalid key', f'{key_name} is already used.')
+            q.QMessageBox.critical(self, tr('message.invalid_key'), tr('message.key_exists').format(name=key_name))
             return
 
         type_id = self.type_group.checkedId()
@@ -171,23 +172,23 @@ class ContainerView(q.QWidget):
         self.tview.customContextMenuRequested.connect(self.onContextMenu)
         util.set_view_delegate(self.tview)
 
-        self.add_btn = q.QPushButton('Add...')
+        self.add_btn = q.QPushButton(tr('button.add'))
         self.add_btn.setStyleSheet('padding: 2px 5px;')
         self.add_btn.clicked.connect(self.onAdd)
-        self.autofill_btn = q.QPushButton('Auto fill')
+        self.autofill_btn = q.QPushButton(tr('button.autofill'))
         self.autofill_btn.setStyleSheet('padding: 2px 5px;')
         self.autofill_btn.clicked.connect(self.autofillRequested)
-        self.reorder_btn = q.QPushButton('Reorder')
+        self.reorder_btn = q.QPushButton(tr('button.reorder'))
         self.reorder_btn.setStyleSheet('padding: 2px 5px;')
         self.reorder_btn.clicked.connect(self.reorderRequested)
-        self.copy_btn = q.QPushButton('Copy JSON')
+        self.copy_btn = q.QPushButton(tr('button.copy_json'))
         self.copy_btn.setStyleSheet('padding: 2px 5px;')
         self.copy_btn.clicked.connect(self.copyJsonRequested)
-        self.paste_btn = q.QPushButton('Paste JSON')
+        self.paste_btn = q.QPushButton(tr('button.paste_json'))
         self.paste_btn.setStyleSheet('padding: 2px 5px;')
         self.paste_btn.clicked.connect(self.pasteJsonRequested)
         box = q.QHBoxLayout()
-        label = q.QLabel('Parameters')
+        label = q.QLabel(tr('label.parameters'))
         label.setStyleSheet('font-weight: bold;')
         box.addWidget(label, stretch=1)
         if has_autofill_btn:
@@ -220,8 +221,8 @@ class ContainerView(q.QWidget):
             return
         idx = smodel.selectedIndexes()[0]
         menu = q.QMenu()
-        menu.addAction('Convert to &argument', lambda: self.onConvertToArgument(idx))
-        menu.addAction('&Remove item', lambda: self.onRemove(idx))
+        menu.addAction(tr('button.convert_to_argument'), lambda: self.onConvertToArgument(idx))
+        menu.addAction(tr('button.remove_item'), lambda: self.onRemove(idx))
         for builder in self.action_builders:
             builder(menu, idx)
         menu.exec_(self.sender().viewport().mapToGlobal(pos))

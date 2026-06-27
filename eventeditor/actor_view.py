@@ -7,6 +7,7 @@ from eventeditor.actor_string_list_view import ActorActionListView, ActorQueryLi
 from eventeditor.container_model import ContainerModel
 from eventeditor.container_view import ContainerView
 from eventeditor.flow_data import FlowDataChangeReason
+from eventeditor.i18n import tr
 import eventeditor.util as util
 from evfl import Container, EventFlow, Actor, ActorIdentifier
 from evfl.entry_point import EntryPoint
@@ -16,7 +17,7 @@ import PyQt5.QtWidgets as q # type: ignore
 class ActorEditDialog(q.QDialog):
     def __init__(self, parent, flow_data, idx: int) -> None:
         super().__init__(parent, qc.Qt.WindowTitleHint | qc.Qt.WindowSystemMenuHint)
-        self.setWindowTitle('Edit actor')
+        self.setWindowTitle(tr('dialog.edit_actor'))
         self.setMinimumWidth(500)
         self.flow_data = flow_data
         self.mapper = q.QDataWidgetMapper(self)
@@ -34,11 +35,11 @@ class ActorEditDialog(q.QDialog):
         self.form = q.QFormLayout()
 
         self.name_edit = q.QLineEdit()
-        self.form.addRow('&Name:', self.name_edit)
+        self.form.addRow(tr('label.actor_name'), self.name_edit)
         self.mapper.addMapping(self.name_edit, ActorModelColumn.Name)
 
         self.sub_name_edit = q.QLineEdit()
-        self.form.addRow('S&ub name:', self.sub_name_edit)
+        self.form.addRow(tr('label.actor_sub_name'), self.sub_name_edit)
         self.mapper.addMapping(self.sub_name_edit, ActorModelColumn.SubName)
 
         self.arg_group = self.createArgumentGroup()
@@ -56,15 +57,15 @@ class ActorEditDialog(q.QDialog):
         form = q.QFormLayout()
 
         self.argument_name_edit = q.QLineEdit()
-        form.addRow('Argument name:', self.argument_name_edit)
+        form.addRow(tr('label.actor_argument_name'), self.argument_name_edit)
         self.mapper.addMapping(self.argument_name_edit, ActorModelColumn.ArgumentName)
 
         self.ep_cbox = q.QComboBox()
-        form.addRow('Entry point:', self.ep_cbox)
+        form.addRow(tr('label.actor_entry_point'), self.ep_cbox)
         self.ep_cbox.setModel(self.flow_data.entry_point_model)
         self.mapper.addMapping(self.ep_cbox, ActorModelColumn.ArgumentEntryPoint, b'currentData')
 
-        group = q.QGroupBox('Is an &argument')
+        group = q.QGroupBox(tr('label.is_argument'))
         group.setCheckable(True)
         group.setLayout(form)
         return group
@@ -83,7 +84,7 @@ class ActorEditDialog(q.QDialog):
         model = self.mapper.model()
         identifier = ActorIdentifier(self.name_edit.text(), self.sub_name_edit.text())
         if identifier != self.prev_identifier and model.has(identifier):
-            q.QMessageBox.critical(self, 'Cannot edit actor', f'{identifier} is already used as an actor identifier. Please pick another one.')
+            q.QMessageBox.critical(self, tr('message.cannot_remove'), tr('message.actor_exists').format(actor=identifier))
             return
 
         self.mapper.submit()
@@ -95,7 +96,7 @@ class ActorEditDialog(q.QDialog):
 class ActorAddDialog(ActorEditDialog):
     def __init__(self, parent, flow_data, idx) -> None:
         super().__init__(parent, flow_data, idx)
-        self.setWindowTitle('Add new actor')
+        self.setWindowTitle(tr('dialog.add_actor'))
 
     def reject(self) -> None:
         self.flow_data.actor_model.remove(self.flow_data.actor_model.data(
@@ -146,9 +147,9 @@ class ActorDetailPane(q.QWidget):
         util.connect_model_change_signals(self.query_model, self.flow_data, FlowDataChangeReason.Actors)
         util.connect_model_change_signals(self.container_model, self.flow_data, FlowDataChangeReason.Actors)
 
-        self.action_view.addActionBuilder(lambda menu, idx: menu.addAction('&Jump to events', lambda: self.onJumpToEvents(idx)))
-        self.query_view.addActionBuilder(lambda menu, idx: menu.addAction('&Jump to events', lambda: self.onJumpToEvents(idx)))
-        self.container_view.addActionBuilder(lambda menu, idx: menu.addAction('&Add default create parameters', lambda: self.addDefaultCreateParameters()))
+        self.action_view.addActionBuilder(lambda menu, idx: menu.addAction(tr('button.jump_to_events'), lambda: self.onJumpToEvents(idx)))
+        self.query_view.addActionBuilder(lambda menu, idx: menu.addAction(tr('button.jump_to_events'), lambda: self.onJumpToEvents(idx)))
+        self.container_view.addActionBuilder(lambda menu, idx: menu.addAction(tr('button.add_default_create_parameters'), lambda: self.addDefaultCreateParameters()))
 
     def addDefaultCreateParameters(self) -> None:
         if not self.actor or not self.actor.params:
@@ -189,7 +190,7 @@ class ActorView(q.QWidget):
         self.top_box.setContentsMargins(5,5,5,0)
         self.num_actors_label = q.QLabel()
         self.top_box.addWidget(self.num_actors_label, stretch=1)
-        self.add_actor_btn = q.QPushButton('A&dd...')
+        self.add_actor_btn = q.QPushButton(tr('label.add_actor'))
         self.add_actor_btn.setEnabled(False)
         self.top_box.addWidget(self.add_actor_btn)
 
@@ -218,7 +219,7 @@ class ActorView(q.QWidget):
         self.actor_view.selectionModel().selectionChanged.connect(self.onSelectionChanged)
 
     def updateNumActorLabel(self, *_) -> None:
-        self.num_actors_label.setText(f'{self.flow_data.actor_model.rowCount(None)} actor(s)')
+        self.num_actors_label.setText(tr('label.num_actors').format(count=self.flow_data.actor_model.rowCount(None)))
 
     def addActor(self) -> None:
         ok = self.flow_data.actor_model.appendEmptyActor()
@@ -233,7 +234,7 @@ class ActorView(q.QWidget):
     def removeActor(self, idx: qc.QModelIndex) -> None:
         actor = idx.data(qc.Qt.UserRole)
         if util.is_actor_in_use(self.flow_data.flow.flowchart.events, actor):
-            q.QMessageBox.critical(self, 'Cannot remove actor', f'{actor.identifier} cannot be removed because it is used by events. Please remove any references to this actor and try again.')
+            q.QMessageBox.critical(self, tr('message.cannot_remove'), tr('message.cannot_remove_actor').format(actor=actor.identifier))
             return
 
         self.flow_data.actor_model.remove(actor)
@@ -262,7 +263,12 @@ class ActorView(q.QWidget):
         idx = smodel.selectedRows()[0]
 
         menu = q.QMenu()
-        menu.addAction('&Edit...', lambda: self.editActor(idx))
-        menu.addAction('&Remove', lambda: self.removeActor(idx))
-        menu.addAction('&Jump to events', lambda: self.jumpToActorEventsRequested.emit(str(idx.data(qc.Qt.UserRole).identifier) + '::'))
+        menu.addAction(tr('button.edit'), lambda: self.editActor(idx))
+        menu.addAction(tr('button.remove'), lambda: self.removeActor(idx))
+        menu.addAction(tr('button.jump_to_events'), lambda: self.jumpToActorEventsRequested.emit(str(idx.data(qc.Qt.UserRole).identifier) + '::'))
         menu.exec_(self.sender().viewport().mapToGlobal(pos))
+
+    def _retranslateUi(self) -> None:
+        """Update UI text when language changes."""
+        self.add_actor_btn.setText(tr('label.add_actor'))
+        self.updateNumActorLabel()

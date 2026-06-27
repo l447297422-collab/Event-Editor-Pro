@@ -94,11 +94,16 @@ class EventView(q.QWidget):
         sidx = smodel.selectedRows()[0]
         source_idx = self.event_proxy_model.mapToSource(sidx)
         menu = q.QMenu()
-        menu.addAction('&Edit...', lambda: self.editEvent(source_idx.row()))
-        menu.addAction('&Jump to flowchart', lambda: self.jumpToFlowchartRequested.emit(source_idx.row()))
+        menu.addAction(tr('button.edit'), lambda: self.editEvent(source_idx.row()))
+        menu.addAction(tr('button.jump_to_flowchart'), lambda: self.jumpToFlowchartRequested.emit(source_idx.row()))
         menu.exec_(self.sender().viewport().mapToGlobal(pos))
 
     def onEnterPressed(self) -> None:
         selected_idx = self.getSelectedEventIdx()
         if selected_idx:
             self.jumpToFlowchartRequested.emit(selected_idx.row())
+
+    def _retranslateUi(self) -> None:
+        """Update UI text when language changes."""
+        # Event view doesn't have any static text labels to update
+        pass

@@ -1,5 +1,6 @@
 import json
 import typing
+import re
 
 import eventeditor.actor_json as aj
 from eventeditor.container_model import ContainerModel
@@ -10,6 +11,7 @@ from eventeditor.event_chooser_dialog import show_event_type_chooser, add_new_ev
 from eventeditor.event_fork_chooser_dialog import EventForkChooserDialog
 from eventeditor.flow_data import FlowData, FlowDataChangeReason
 import eventeditor.flowchart_tools as ft
+from eventeditor.i18n import tr
 from eventeditor.search_bar import SearchBar
 from eventeditor.util import *
 from evfl import Container, Flowchart, Actor, Event, EventFlow, ActionEvent, SwitchEvent, ForkEvent, JoinEvent, SubFlowEvent
@@ -22,6 +24,219 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView # type: ignore
 import PyQt5.QtCore as qc # type: ignore
 import PyQt5.QtGui as qg # type: ignore
 import PyQt5.QtWidgets as q # type: ignore
+
+class SearchResult(typing.NamedTuple):
+    event_idx: int
+    param_name: str
+    param_value: typing.Any
+    event_name: str
+    event_type: str
+
+class SearchReplaceDialog(q.QDialog):
+    def __init__(self, parent, flow_data: FlowData, select_callback) -> None:
+        super().__init__(parent)
+        self.flow_data = flow_data
+        self.select_callback = select_callback
+        self.results: typing.List[SearchResult] = []
+        self.current_index = -1
+        self.initWidgets()
+        self.initLayout()
+        self.setWindowTitle(tr('dialog.search_replace'))
+
+    def initWidgets(self) -> None:
+        self.search_label = q.QLabel(tr('label.search_for'))
+        self.search_edit = q.QLineEdit()
+
+        self.replace_label = q.QLabel(tr('label.replace_with'))
+        self.replace_edit = q.QLineEdit()
+
+        self.case_sensitive_check = q.QCheckBox(tr('label.case_sensitive'))
+        self.case_sensitive_check.setChecked(False)
+
+        self.use_regex_check = q.QCheckBox(tr('label.use_regex'))
+        self.use_regex_check.setChecked(False)
+
+        self.find_button = q.QPushButton(tr('button.find'))
+        self.find_button.clicked.connect(self.onFind)
+
+        self.find_next_button = q.QPushButton(tr('button.find_next'))
+        self.find_next_button.clicked.connect(self.onFindNext)
+        self.find_next_button.setEnabled(False)
+
+        self.replace_button = q.QPushButton(tr('button.replace'))
+        self.replace_button.clicked.connect(self.onReplace)
+        self.replace_button.setEnabled(False)
+
+        self.replace_all_button = q.QPushButton(tr('button.replace_all'))
+        self.replace_all_button.clicked.connect(self.onReplaceAll)
+        self.replace_all_button.setEnabled(False)
+
+        self.count_label = q.QLabel('')
+        self.status_label = q.QLabel('')
+
+        self.search_edit.textChanged.connect(lambda: self.updateButtons())
+        self.replace_edit.textChanged.connect(lambda: self.updateButtons())
+
+    def initLayout(self) -> None:
+        layout = q.QVBoxLayout(self)
+
+        grid = q.QGridLayout()
+        grid.addWidget(self.search_label, 0, 0)
+        grid.addWidget(self.search_edit, 0, 1)
+        grid.addWidget(self.replace_label, 1, 0)
+        grid.addWidget(self.replace_edit, 1, 1)
+        layout.addLayout(grid)
+
+        check_layout = q.QHBoxLayout()
+        check_layout.addWidget(self.case_sensitive_check)
+        check_layout.addWidget(self.use_regex_check)
+        check_layout.addStretch()
+        layout.addLayout(check_layout)
+
+        button_layout = q.QHBoxLayout()
+        button_layout.addWidget(self.find_button)
+        button_layout.addWidget(self.find_next_button)
+        button_layout.addWidget(self.replace_button)
+        button_layout.addWidget(self.replace_all_button)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+
+        status_layout = q.QHBoxLayout()
+        status_layout.addWidget(self.count_label)
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
+        layout.addLayout(status_layout)
+
+        self.search_edit.setFocus()
+
+    def updateButtons(self) -> None:
+        has_search = bool(self.search_edit.text().strip())
+        has_replace = bool(self.replace_edit.text())
+        self.find_button.setEnabled(has_search)
+        self.find_next_button.setEnabled(has_search and len(self.results) > 0)
+        self.replace_button.setEnabled(has_search and has_replace and len(self.results) > 0 and self.current_index >= 0)
+        self.replace_all_button.setEnabled(has_search and has_replace and len(self.results) > 0)
+
+    def search(self, text: str) -> typing.List[SearchResult]:
+        """搜索event参数中的value"""
+        results = []
+        if not text or not self.flow_data.flow or not self.flow_data.flow.flowchart:
+            return results
+
+        flags = 0 if self.case_sensitive_check.isChecked() else re.IGNORECASE
+        pattern = re.compile(text, flags) if self.use_regex_check.isChecked() else None
+
+        for idx, event in enumerate(self.flow_data.flow.flowchart.events):
+            params = get_event_param_list(event)
+            event_type = get_event_type(event)
+            for param_name, param_value in params.items():
+                str_value = str(param_value)
+                if pattern:
+                    if pattern.search(str_value):
+                        results.append(SearchResult(idx, param_name, param_value, event.name, event_type))
+                else:
+                    if text.lower() in str_value.lower() if not self.case_sensitive_check.isChecked() else text in str_value:
+                        results.append(SearchResult(idx, param_name, param_value, event.name, event_type))
+        return results
+
+    def onFind(self) -> None:
+        """执行搜索"""
+        text = self.search_edit.text().strip()
+        if not text:
+            return
+
+        self.results = self.search(text)
+        self.current_index = 0
+        self.updateButtons()
+
+        if self.results:
+            self.count_label.setText(tr('message.found_count').format(count=len(self.results)))
+            self.goToResult(0)
+        else:
+            self.count_label.setText(tr('message.no_results'))
+            self.status_label.setText('')
+
+    def onFindNext(self) -> None:
+        """查找下一个"""
+        if not self.results:
+            return
+        self.current_index = (self.current_index + 1) % len(self.results)
+        self.goToResult(self.current_index)
+
+    def goToResult(self, index: int) -> None:
+        """跳转到搜索结果"""
+        if index < 0 or index >= len(self.results):
+            return
+        result = self.results[index]
+        self.status_label.setText(tr('message.search_status').format(
+            current=index+1,
+            total=len(self.results),
+            event=result.event_name,
+            param=result.param_name,
+            value=str(result.param_value)
+        ))
+        if self.select_callback:
+            self.select_callback(result.event_idx)
+
+    def onReplace(self) -> None:
+        """替换当前找到的结果"""
+        if self.current_index < 0 or self.current_index >= len(self.results):
+            return
+
+        result = self.results[self.current_index]
+        self.doReplace(result.event_idx, result.param_name, self.search_edit.text(), self.replace_edit.text())
+
+        self.onFindNext()
+
+    def onReplaceAll(self) -> None:
+        """替换所有找到的结果"""
+        replace_count = 0
+        search_text = self.search_edit.text()
+        replace_text = self.replace_edit.text()
+        for result in self.results:
+            self.doReplace(result.event_idx, result.param_name, search_text, replace_text)
+            replace_count += 1
+
+        self.count_label.setText(tr('message.replaced_count').format(count=replace_count))
+        self.status_label.setText('')
+
+    def doReplace(self, event_idx: int, param_name: str, search_text: str, replace_text: str) -> None:
+        """执行字符串替换操作（只替换匹配的部分）"""
+        if not self.flow_data.flow or not self.flow_data.flow.flowchart:
+            return
+
+        event = self.flow_data.flow.flowchart.events[event_idx]
+        params = get_event_param_list(event)
+
+        old_value = params.get(param_name)
+        if old_value is None:
+            return
+
+        str_value = str(old_value)
+        if self.use_regex_check.isChecked():
+            flags = 0 if self.case_sensitive_check.isChecked() else re.IGNORECASE
+            pattern = re.compile(search_text, flags)
+            new_str_value = pattern.sub(replace_text, str_value)
+        else:
+            if self.case_sensitive_check.isChecked():
+                new_str_value = str_value.replace(search_text, replace_text)
+            else:
+                new_str_value = str_value.lower().replace(search_text.lower(), replace_text)
+
+        if isinstance(old_value, int):
+            try:
+                params[param_name] = int(new_str_value)
+            except ValueError:
+                params[param_name] = new_str_value
+        elif isinstance(old_value, float):
+            try:
+                params[param_name] = float(new_str_value)
+            except ValueError:
+                params[param_name] = new_str_value
+        else:
+            params[param_name] = new_str_value
+
+        self.flow_data.flowDataChanged.emit(FlowDataChangeReason.EventParameters)
 
 class FlowchartWebObject(qc.QObject):
     flowDataChanged = qc.pyqtSignal()
@@ -39,6 +254,24 @@ class FlowchartWebObject(qc.QObject):
     @qc.pyqtSlot(result=qc.QVariant)
     def getJson(self) -> qc.QVariant:
         return qc.QVariant(json.loads(json.dumps(self.getData(), default=lambda x: str(x))))
+
+    @qc.pyqtSlot(result=qc.QVariant)
+    def getTranslations(self) -> qc.QVariant:
+        translations = {
+            'edit_event': tr('message.edit_event'),
+            'edit_cases': tr('message.edit_cases'),
+            'edit_branches': tr('message.edit_branches'),
+            'add_entry_point_here': tr('message.add_entry_point_here'),
+            'add_new_parent': tr('message.add_new_parent'),
+            'add_new_child': tr('message.add_new_child'),
+            'unlink_child': tr('message.unlink_child'),
+            'link_to_event': tr('message.link_to_event'),
+            'remove_event': tr('message.remove_event'),
+            'remove_entry_point': tr('message.remove_entry_point'),
+            'show_all_events': tr('button.show_all_events'),
+            'show_only_connected_events': tr('button.show_connected_events'),
+        }
+        return qc.QVariant(translations)
 
     def getData(self) -> list:
         flow = self.view.flow_data.flow
@@ -188,14 +421,20 @@ class FlowchartView(q.QWidget):
 
     def setIsCurrentView(self, is_current: bool) -> None:
         self.is_current = is_current
-        if is_current and self.update_timer.isActive():
-            self.update_timer.stop()
-            self.web_object.flowDataChanged.emit()
+        if is_current:
+            if self.update_timer.isActive():
+                self.update_timer.stop()
+                self.web_object.flowDataChanged.emit()
+            self.view.setVisible(True)
+            self.view.setUpdatesEnabled(True)
+        else:
+            self.view.setUpdatesEnabled(False)
+            self.view.setVisible(False)
 
     def export(self) -> None:
         if not self.flow_data.flow:
             return
-        path = q.QFileDialog.getSaveFileName(self, 'Select a location for the graph data', self.flow_data.flow.name + '.json', 'Data (*.json)')[0]
+        path = q.QFileDialog.getSaveFileName(self, tr('dialog.export_graph'), self.flow_data.flow.name + '.json', 'Data (*.json)')[0]
         if not path:
             return
         data = self.web_object.getData()
@@ -203,17 +442,22 @@ class FlowchartView(q.QWidget):
             with open(path, 'w') as f:
                 json.dump(data, f, default=lambda x: str(x))
         except:
-            q.QMessageBox.critical(self, 'Export graph data', 'Failed to write to ' + path)
-    
+            q.QMessageBox.critical(self, tr('dialog.export_graph'), tr('message.failed_save'))
+
     def export_definitions(self) -> None:
         try:
             aj.export_definitions(self.flow_data.flow, self)
         except:
-            q.QMessageBox.critical(self, 'Export actor definition data', 'Failed to write to ' + str(aj._actor_definitions_path))
+            q.QMessageBox.critical(self, tr('dialog.export_definitions'), tr('message.failed_save'))
     
     def reorder_event_parameters(self) -> None:
         ft.reorder_event_flow_parameters(self.flow_data.flow)
         self.flow_data.flowDataChanged.emit(FlowDataChangeReason.EventParameters)
+
+    def search(self) -> None:
+        """打开搜索替换对话框"""
+        dialog = SearchReplaceDialog(self, self.flow_data, self.onEventSelectedInWebView)
+        dialog.exec_()
 
     def reload(self) -> None:
         self.view.reload()
@@ -283,7 +527,7 @@ class FlowchartView(q.QWidget):
         if event_idx < 0:
             return
 
-        ep_name, ok = q.QInputDialog.getText(self, 'Add entry point', f'Name of the new entry point:', q.QLineEdit.Normal)
+        ep_name, ok = q.QInputDialog.getText(self, tr('dialog.add_entry_point'), tr('dialog.add_entry_point_prompt'), q.QLineEdit.Normal)
         if not ok or not ep_name:
             return
 
@@ -311,12 +555,12 @@ class FlowchartView(q.QWidget):
         list_widget = CheckableEventParentListWidget(None, event, parent_events)
         if parent_events:
             dialog = q.QDialog(self, qc.Qt.WindowTitleHint | qc.Qt.WindowSystemMenuHint)
-            dialog.setWindowTitle('Add new event above...')
+            dialog.setWindowTitle(tr('dialog.add_event_above'))
             btn_box = q.QDialogButtonBox(q.QDialogButtonBox.Ok | q.QDialogButtonBox.Cancel);
             btn_box.accepted.connect(dialog.accept)
             btn_box.rejected.connect(dialog.reject)
             dialog_layout = q.QVBoxLayout(dialog)
-            dialog_layout.addWidget(q.QLabel('Please select links that should be modified to point to the new event you are going to add.'))
+            dialog_layout.addWidget(q.QLabel(tr('dialog.add_event_above_prompt')))
             dialog_layout.addWidget(list_widget)
             dialog_layout.addWidget(btn_box)
             ret = dialog.exec_()
@@ -404,14 +648,14 @@ class FlowchartView(q.QWidget):
 
     def webDoLink(self, event: Event, target: Event) -> None:
         if event == target:
-            q.QMessageBox.critical(self, 'Invalid choice', 'Cannot link an event to itself. Please choose another event and try again.')
+            q.QMessageBox.critical(self, tr('message.invalid_choice'), tr('message.cannot_link_self'))
             return
         event.data.nxt.v = target # type: ignore
         self.flow_data.flowDataChanged.emit(FlowDataChangeReason.Events)
         self.delayedSelect(target)
 
     def webUnlink(self, event_idx: int) -> None:
-        ret = q.QMessageBox.question(self, 'Unlink', 'Warning: Unlinking events that are in nested fork branches can currently result in graph corruption. Continue?')
+        ret = q.QMessageBox.question(self, tr('message.unlink'), tr('message.unlink_warning'))
         if ret != q.QMessageBox.Yes:
             return
 
@@ -558,6 +802,11 @@ class FlowchartView(q.QWidget):
         dialog.chooserEventDoubleClicked.connect(self.selectRequested)
         self.eventSelected.connect(dialog.chooserSelectSignal)
         dialog.show()
+
+    def _retranslateUi(self) -> None:
+        """Update UI text when language changes."""
+        # Refresh web view translations by reloading
+        self.web_object.flowDataChanged.emit()
 
     def addFork(self) -> None:
         self.web_object.actionProhibitionChanged.emit(True)

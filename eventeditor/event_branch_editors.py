@@ -3,6 +3,7 @@ import typing
 
 from eventeditor.event_chooser_dialog import EventChooserDialog
 from eventeditor.flow_data import FlowData, FlowDataChangeReason
+from eventeditor.i18n import tr
 import eventeditor.util as util
 from evfl import Event
 from evfl.common import RequiredIndex
@@ -99,7 +100,7 @@ class SwitchCaseModel(qc.QAbstractTableModel):
 
     def appendCase(self, case: SwitchCase) -> bool:
         if self.hasCaseValue(case.value):
-            q.QMessageBox.critical(None, 'Invalid data', f'Value {case.value} is already handled by another case.')
+            q.QMessageBox.critical(None, tr('message.invalid_data'), tr('message.duplicate_case_value').format(value=case.value))
             return False
         self.beginInsertRows(qc.QModelIndex(), len(self.l), len(self.l))
         self.l.append(case)
@@ -121,7 +122,7 @@ class SwitchCaseModel(qc.QAbstractTableModel):
             return True
         if col == SwitchCaseModelColumn.Value and isinstance(value, int):
             if self.hasCaseValue(value):
-                q.QMessageBox.critical(None, 'Invalid data', f'Value {value} is already handled by another case.')
+                q.QMessageBox.critical(None, tr('message.invalid_data'), tr('message.duplicate_case_value').format(value=value))
                 return False
             self.l[row].value = value
         elif col == SwitchCaseModelColumn.Event and isinstance(value, Event):
@@ -152,9 +153,9 @@ class SwitchCaseModel(qc.QAbstractTableModel):
         if role != qc.Qt.DisplayRole:
             return qc.QVariant()
         if section == SwitchCaseModelColumn.Value:
-            return 'Value'
+            return tr('column.switch_case.value')
         if section == SwitchCaseModelColumn.Event:
-            return 'Event'
+            return tr('column.switch_case.event')
         return 'Unknown'
 
 class SwitchEventEditDialog(q.QDialog):
@@ -163,7 +164,7 @@ class SwitchEventEditDialog(q.QDialog):
 
     def __init__(self, parent, cases: _Cases, flow_data: FlowData) -> None:
         super().__init__(parent)
-        self.setWindowTitle('Edit switch event')
+        self.setWindowTitle(tr('dialog.edit_switch_cases'))
         self.setMinimumWidth(600)
         self.flow_data = flow_data
         self.orig_cases = cases
@@ -183,7 +184,7 @@ class SwitchEventEditDialog(q.QDialog):
         self.chooserSelectSignal.connect(self.tview.chooserSelectSignal)
 
         add_btn_box = q.QHBoxLayout()
-        add_btn = q.QPushButton('Add case')
+        add_btn = q.QPushButton(tr('button.add_case'))
         add_btn.clicked.connect(self.addCase)
         add_btn_box.addStretch()
         add_btn_box.addWidget(add_btn)
@@ -204,7 +205,7 @@ class SwitchEventEditDialog(q.QDialog):
 
     def accept(self) -> None:
         if not self.model.isValid():
-            q.QMessageBox.critical(self, 'Invalid data', 'Please ensure there are no placeholder or duplicate cases left.')
+            q.QMessageBox.critical(self, tr('message.invalid_data'), tr('message.placeholder_or_duplicate').format(type='cases'))
             return
 
         self.model.updateCaseDict(self.orig_cases)
@@ -212,7 +213,7 @@ class SwitchEventEditDialog(q.QDialog):
         super().accept()
 
     def addCase(self) -> None:
-        value, ok = q.QInputDialog.getInt(self, 'Add new switch case', 'Please enter the case value:')
+        value, ok = q.QInputDialog.getInt(self, tr('dialog.add_switch_case'), tr('dialog.switch_case_prompt'))
         if not ok:
             return
         self.model.appendCase(SwitchCase(value, _PLACEHOLDER_EVENT))
@@ -223,7 +224,7 @@ class SwitchEventEditDialog(q.QDialog):
             return
         sidx = smodel.selectedRows()[0]
         menu = q.QMenu()
-        menu.addAction('Remove', lambda: self.model.removeCase(sidx.row()))
+        menu.addAction(tr('button.remove'), lambda: self.model.removeCase(sidx.row()))
         menu.exec_(self.sender().viewport().mapToGlobal(pos))
 
 class ForkEventModel(qc.QAbstractListModel):
@@ -264,7 +265,7 @@ class ForkEventModel(qc.QAbstractListModel):
 
     def appendFork(self, fork: Event) -> bool:
         if self.hasFork(fork):
-            q.QMessageBox.critical(None, 'Invalid data', f'{fork.name} is already a fork branch.')
+            q.QMessageBox.critical(None, tr('message.invalid_data'), tr('message.key_exists').format(name=fork.name))
             return False
         self.beginInsertRows(qc.QModelIndex(), len(self.l), len(self.l))
         self.l.append(fork)
@@ -309,7 +310,7 @@ class ForkEventEditDialog(q.QDialog):
 
     def __init__(self, parent, forks: _Forks, flow_data: FlowData) -> None:
         super().__init__(parent)
-        self.setWindowTitle('Edit fork event')
+        self.setWindowTitle(tr('dialog.edit_fork_branches'))
         self.setMinimumWidth(600)
         self.flow_data = flow_data
         self.orig_forks = forks
@@ -328,7 +329,7 @@ class ForkEventEditDialog(q.QDialog):
         self.chooserSelectSignal.connect(self.tview.chooserSelectSignal)
 
         add_btn_box = q.QHBoxLayout()
-        add_btn = q.QPushButton('Add fork')
+        add_btn = q.QPushButton(tr('button.add_fork'))
         add_btn.clicked.connect(self.addFork)
         add_btn_box.addStretch()
         add_btn_box.addWidget(add_btn)
@@ -349,11 +350,11 @@ class ForkEventEditDialog(q.QDialog):
 
     def accept(self) -> None:
         if not self.model.isValid():
-            q.QMessageBox.critical(self, 'Invalid data', 'Please ensure there are no placeholder or duplicate forks left.')
+            q.QMessageBox.critical(self, tr('message.invalid_data'), tr('message.placeholder_or_duplicate').format(type='forks'))
             return
 
         if self.model.rowCount(qc.QModelIndex()) == 0:
-            q.QMessageBox.critical(self, 'Invalid data', 'Fork events must always have at least one branch.')
+            q.QMessageBox.critical(self, tr('message.invalid_data'), tr('message.fork_must_have_one_branch'))
             return
 
         self.model.updateForkList(self.orig_forks)
@@ -369,5 +370,5 @@ class ForkEventEditDialog(q.QDialog):
             return
         sidx = smodel.selectedRows()[0]
         menu = q.QMenu()
-        menu.addAction('Remove', lambda: self.model.removeCase(sidx.row()))
+        menu.addAction(tr('button.remove'), lambda: self.model.removeCase(sidx.row()))
         menu.exec_(self.sender().viewport().mapToGlobal(pos))

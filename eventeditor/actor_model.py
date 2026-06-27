@@ -1,6 +1,7 @@
 from enum import IntEnum, auto
 import typing
 
+from eventeditor.i18n import tr
 from evfl import EventFlow, Actor, ActorIdentifier
 from evfl.entry_point import EntryPoint
 import PyQt5.QtCore as qc # type: ignore
@@ -88,17 +89,17 @@ class ActorModel(qc.QAbstractTableModel):
             return qc.QVariant()
 
         if section == ActorModelColumn.Name:
-            return 'Name'
+            return tr('column.actor.name')
         if section == ActorModelColumn.SubName:
-            return 'Sub name'
+            return tr('column.actor.sub_name')
         if section == ActorModelColumn.ArgumentName:
-            return 'Argument name'
+            return tr('column.actor.argument_name')
         if section == ActorModelColumn.ArgumentEntryPoint:
-            return 'Argument entry point'
+            return tr('column.actor.argument_entry_point')
         if section == ActorModelColumn.NumActions:
-            return 'Actions'
+            return tr('column.actor.actions')
         if section == ActorModelColumn.NumQueries:
-            return 'Queries'
+            return tr('column.actor.queries')
         return 'Unknown'
 
     def data(self, index, role) -> qc.QVariant:
@@ -137,3 +138,7 @@ class ActorModel(qc.QAbstractTableModel):
         if col == ActorModelColumn.NumQueries:
             return str(len(self.l[row].queries))
         return qc.QVariant()
+
+    def _retranslateUi(self) -> None:
+        """Refresh header data when language changes."""
+        self.headerDataChanged.emit(qc.Qt.Horizontal, 0, self.columnCount(None) - 1)

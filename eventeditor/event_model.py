@@ -1,6 +1,7 @@
 from enum import IntEnum, auto
 import typing
 
+from eventeditor.i18n import tr
 from eventeditor.util import *
 from evfl import EventFlow, Event
 import PyQt5.QtCore as qc # type: ignore
@@ -48,15 +49,15 @@ class EventModel(qc.QAbstractTableModel):
             return qc.QVariant()
 
         if section == EventModelColumn.Name:
-            return 'Name'
+            return tr('column.event.name')
         if section == EventModelColumn.Type:
-            return 'Type'
+            return tr('column.event.type')
         if section == EventModelColumn.Description:
-            return 'Description'
+            return tr('column.event.description')
         if section == EventModelColumn.Next:
-            return 'Next'
+            return tr('column.event.next')
         if section == EventModelColumn.Parameters:
-            return 'Parameters'
+            return tr('column.event.parameters')
         return 'Unknown'
 
     def data(self, index, role) -> qc.QVariant:
@@ -84,3 +85,7 @@ class EventModel(qc.QAbstractTableModel):
             if role == qc.Qt.ToolTipRole:
                 return '<br>'.join([f'<b>{k}</b>: {v}' for k, v in params.items()])
         return qc.QVariant()
+
+    def _retranslateUi(self) -> None:
+        """Refresh header data when language changes."""
+        self.headerDataChanged.emit(qc.Qt.Horizontal, 0, self.columnCount(None) - 1)

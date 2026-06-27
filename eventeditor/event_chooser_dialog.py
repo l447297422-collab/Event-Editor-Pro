@@ -4,6 +4,7 @@ import typing
 
 from eventeditor.event_view import EventView
 from eventeditor.flow_data import FlowData
+from eventeditor.i18n import tr
 import eventeditor.util as util
 from evfl import Actor, Container, Event, ActionEvent, SwitchEvent, ForkEvent, JoinEvent, SubFlowEvent
 from evfl.common import StringHolder
@@ -16,15 +17,15 @@ import PyQt5.QtWidgets as q # type: ignore
 class EventTypeChooserDialog(q.QDialog):
     def __init__(self, parent) -> None:
         super().__init__(parent, qc.Qt.WindowTitleHint | qc.Qt.WindowSystemMenuHint)
-        self.setWindowTitle('Choose an event type')
+        self.setWindowTitle(tr('dialog.choose_event_type'))
 
         self.rbtn_group = q.QButtonGroup()
-        action_rbtn = q.QRadioButton('&Action')
+        action_rbtn = q.QRadioButton(tr('event.action'))
         action_rbtn.setChecked(True)
         self.rbtn_group.addButton(action_rbtn, EventType.kAction)
-        switch_rbtn = q.QRadioButton('&Switch')
+        switch_rbtn = q.QRadioButton(tr('event.switch'))
         self.rbtn_group.addButton(switch_rbtn, EventType.kSwitch)
-        subflow_rbtn = q.QRadioButton('S&ub flow')
+        subflow_rbtn = q.QRadioButton(tr('event.sub_flow'))
         self.rbtn_group.addButton(subflow_rbtn, EventType.kSubFlow)
 
         btn_box = q.QDialogButtonBox(q.QDialogButtonBox.Ok | q.QDialogButtonBox.Cancel);
@@ -71,7 +72,7 @@ def add_new_event(parent, flow_data: FlowData) -> typing.Optional[Event]:
 
     global _placeholder_warning_shown
     if not _placeholder_warning_shown:
-        q.QMessageBox.warning(parent, 'Save warning', 'Saves and auto-saves will not work until the placeholder events are edited.')
+        q.QMessageBox.warning(parent, tr('message.save_warning'), tr('message.placeholder_warning'))
         _placeholder_warning_shown = True
 
     flow_data.event_model.append(new_event)
@@ -80,7 +81,7 @@ def add_new_event(parent, flow_data: FlowData) -> typing.Optional[Event]:
 class EventChooserDialog(q.QDialog):
     def __init__(self, parent, flow_data: FlowData, enable_ctx_menu: bool=True) -> None:
         super().__init__(parent, qc.Qt.WindowTitleHint | qc.Qt.WindowSystemMenuHint)
-        self.setWindowTitle('Choose an event')
+        self.setWindowTitle(tr('dialog.choose_event'))
         self.setMinimumWidth(700)
         self.setMinimumHeight(250)
         self.flow_data = flow_data
@@ -88,7 +89,7 @@ class EventChooserDialog(q.QDialog):
         self.event_view = EventView(None, self.flow_data, enable_ctx_menu)
 
         add_event_box = q.QHBoxLayout()
-        add_event_btn = q.QPushButton('Add event...')
+        add_event_btn = q.QPushButton(tr('button.add_event'))
         add_event_btn.clicked.connect(self.addEvent)
         add_event_box.addStretch()
         add_event_box.addWidget(add_event_btn)
@@ -113,7 +114,7 @@ class EventChooserDialog(q.QDialog):
     def accept(self) -> None:
         selected_event = self.event_view.getSelectedEvent()
         if not selected_event:
-            q.QMessageBox.critical(self, 'Events', 'Please select an event.')
+            q.QMessageBox.critical(self, 'Events', tr('message.no_events_selected'))
             return
 
         self.selected_event = selected_event
@@ -193,9 +194,9 @@ class CheckableEventParentListWidget(q.QWidget):
         self.model = CheckableEventParentListModel(self, child_event, events)
 
         select_btn_box = q.QHBoxLayout()
-        all_btn = q.QPushButton('All')
+        all_btn = q.QPushButton(tr('button.all'))
         all_btn.clicked.connect(lambda: self.model.selectAll())
-        none_btn = q.QPushButton('None')
+        none_btn = q.QPushButton(tr('button.none'))
         none_btn.clicked.connect(lambda: self.model.selectNone())
         select_btn_box.addStretch()
         select_btn_box.addWidget(all_btn)
